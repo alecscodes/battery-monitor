@@ -58,6 +58,23 @@ int BatteryMonitor::getBatteryLevel() const
     }
 }
 
+bool BatteryMonitor::shouldNotify(int batteryLevel, bool charging) const
+{
+    if (!notificationsEnabled)
+        return false;
+    return (batteryLevel <= LOW_BATTERY_THRESHOLD && !charging) ||
+           (batteryLevel >= HIGH_BATTERY_THRESHOLD && charging);
+}
+
+void BatteryMonitor::resetNotificationState(int batteryLevel)
+{
+    if (batteryLevel > LOW_BATTERY_THRESHOLD && batteryLevel < HIGH_BATTERY_THRESHOLD)
+    {
+        notificationsEnabled = true;
+        notificationCount = 0;
+    }
+}
+
 void BatteryMonitor::monitor()
 {
     while (true)
@@ -67,17 +84,21 @@ void BatteryMonitor::monitor()
             int batteryLevel = getBatteryLevel();
             bool charging = isCharging();
 
-            if (batteryLevel <= LOW_BATTERY_THRESHOLD && !charging)
+            resetNotificationState(batteryLevel);
+
+            if (shouldNotify(batteryLevel, charging))
             {
-                sendNotification("Battery level is at " +
-                                 std::to_string(batteryLevel) +
-                                 "%. Please connect the charger.");
-            }
-            else if (batteryLevel >= HIGH_BATTERY_THRESHOLD && charging)
-            {
-                sendNotification("Battery level is at " +
-                                 std::to_string(batteryLevel) +
-                                 "%. You can disconnect the charger.");
+                if (notificationCount < MAX_NOTIFICATIONS)
+                {
+                    sendNotification("Battery level is at " + std::to_string(batteryLevel) +
+                                     "%. " + (charging ? "You can disconnect" : "Please connect") +
+                                     " the charger.");
+                    notificationCount++;
+                }
+                else
+                {
+                    notificationsEnabled = false;
+                }
             }
 
             std::this_thread::sleep_for(std::chrono::seconds(CHECK_INTERVAL_SECONDS));
